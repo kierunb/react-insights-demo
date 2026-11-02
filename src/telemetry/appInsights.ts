@@ -1,35 +1,69 @@
-import { ApplicationInsights } from '@microsoft/applicationinsights-web';
-import { ReactPlugin } from '@microsoft/applicationinsights-react-js';
+import { ApplicationInsights } from '@microsoft/applicationinsights-web'
+import { ReactPlugin } from '@microsoft/applicationinsights-react-js'
+import { ClickAnalyticsPlugin } from '@microsoft/applicationinsights-clickanalytics-js'
+import { recordTelemetry } from './telemetryLog'
 
-// Create the React plugin for component tracking
-const reactPlugin = new ReactPlugin();
+export const reactPlugin = new ReactPlugin()
+const clickPlugin = new ClickAnalyticsPlugin()
+const connectionString = import.meta.env.VITE_APPINSIGHTS_CONNECTION_STRING?.trim()
+export const previewMode = import.meta.env.VITE_APPINSIGHTS_PREVIEW === 'true'
+let filterNoise = false
 
-// Initialize Application Insights
-const appInsights = new ApplicationInsights({
+/** Filters only the deliberately noisy sample event, never real failures. */
+export function setNoiseFilter(enabled: boolean) {
+  filterNoise = enabled
+}
+
+export const appInsights = new ApplicationInsights({
   config: {
-    // Your Application Insights connection string
-    connectionString: import.meta.env.VITE_APPINSIGHTS_CONNECTION_STRING,
-    // Extensions including the React plugin
-    extensions: [reactPlugin],
-    // Enable automatic tracking features
+    connectionString,
+    extensions: [reactPlugin, clickPlugin],
+    extensionConfig: {
+      [clickPlugin.identifier]: {
+        autoCapture: true,
+        dropInvalidEvents: true,
+        dataTags: { useDefaultContentNameOrId: false },
+      },
+    },
     enableAutoRouteTracking: true,
-    // Track unhandled exceptions
     enableUnhandledPromiseRejectionTracking: true,
-    // Disable telemetry in development if desired
-    disableTelemetry: false,
-    // Sample percentage (100 = all requests, 50 = half)
-    samplingPercentage: 100,
-    // Maximum number of AJAX calls tracked per page view
-    maxAjaxCallsPerView: 50,
-    // Track page visit duration
+    enableAjaxPerfTracking: true,
     autoTrackPageVisitTime: true,
+    samplingPercentage: 100,
+    maxAjaxCallsPerView: 50,
+    cookieCfg: { enabled: false },
+    // Visit-time measurement needs session storage; keep the send buffer in memory.
+    enableSessionStorageBuffer: false,
+    // Keep Vite's development traffic out of the dependency examples.
+    excludeRequestFromAutoTrackingPatterns: [/\/@vite\//, /\/src\//, /\/node_modules\//],
   },
-});
+})
 
-// Load the SDK and start collecting telemetry
-appInsights.loadAppInsights();
+appInsights.addTelemetryInitializer((item) => {
+  item.data = {
+    ...item.data,
+    'service.name': 'react-insights-demo',
+    'service.version': '1.0.0',
+    'deployment.environment': import.meta.env.MODE,
+    'demo.source': 'react-playground',
+  }
+  const filtered = filterNoise && item.baseType === 'EventData'
+    && item.baseData?.name === 'demo.noise'
+  recordTelemetry(item, filtered ? 'filtered' : previewMode ? 'preview' : 'queued')
+  // Preview still exercises the real plugins but drops every item before the sender.
+  return !filtered && !previewMode
+})
 
-// Track the initial page view
-appInsights.trackPageView();
+let setupError: string | undefined
+if (connectionString) {
+  try {
+    appInsights.loadAppInsights()
+    appInsights.trackPageView({ name: 'React Insights' })
+  } catch (error) {
+    setupError = error instanceof Error ? error.message : String(error)
+    console.error('Application Insights initialization failed:', error)
+  }
+}
 
-export { reactPlugin, appInsights };
+export const telemetrySetupError = setupError
+export const telemetryReady = Boolean(connectionString) && !setupError

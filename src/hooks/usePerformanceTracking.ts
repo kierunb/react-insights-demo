@@ -1,30 +1,31 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useState } from 'react';
 import { appInsights } from '../telemetry/appInsights';
 
-// Track how long a component takes to mount
+/** Reports render-to-effect elapsed milliseconds, not React CPU render duration. */
 export function useComponentPerformance(componentName: string) {
-  const startTime = useRef(performance.now());
+  const [startTime] = useState(() => performance.now());
 
   useEffect(() => {
-    const duration = performance.now() - startTime.current;
+    const duration = performance.now() - startTime;
 
-    // Report component render time as a custom metric
     appInsights.trackMetric({
       name: `Component.${componentName}.RenderTime`,
       average: duration,
     });
 
-    // Log a warning for slow components
     if (duration > 100) {
       appInsights.trackTrace({
         message: `Slow component render: ${componentName} took ${duration.toFixed(0)}ms`,
         severityLevel: 2, // Warning
       });
     }
-  }, [componentName]);
+  }, [componentName, startTime]);
 }
 
-// Track API call performance
+/**
+ * Measures a custom async operation and rethrows failures.
+ * Do not wrap fetch/XHR: the SDK already tracks those as HTTP dependencies.
+ */
 export async function trackApiCall<T>(
   name: string,
   apiCall: () => Promise<T>
@@ -36,13 +37,13 @@ export async function trackApiCall<T>(
     const duration = performance.now() - startTime;
 
     appInsights.trackDependencyData({
-      id: `api-${Date.now()}`,
+      id: crypto.randomUUID().replaceAll('-', ''),
       name,
       duration,
       success: true,
-      responseCode: 200,
-      type: 'HTTP',
-      target: name,
+      responseCode: 0,
+      type: 'InProc',
+      target: 'demo-worker',
     });
 
     return result;
@@ -50,13 +51,13 @@ export async function trackApiCall<T>(
     const duration = performance.now() - startTime;
 
     appInsights.trackDependencyData({
-      id: `api-${Date.now()}`,
+      id: crypto.randomUUID().replaceAll('-', ''),
       name,
       duration,
       success: false,
-      responseCode: 500,
-      type: 'HTTP',
-      target: name,
+      responseCode: 1,
+      type: 'InProc',
+      target: 'demo-worker',
     });
 
     throw error;

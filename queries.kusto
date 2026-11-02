@@ -2,6 +2,7 @@
 exceptions
 | where timestamp > ago(24h)
 | where client_Type == "Browser"
+| where customDimensions["demo.source"] == "react-playground"
 | summarize count() by problemId, outerMessage
 | order by count_ desc
 | take 20
@@ -9,6 +10,7 @@ exceptions
 // Track page load performance over time
 pageViews
 | where timestamp > ago(7d)
+| where customDimensions["demo.source"] == "react-playground"
 | summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
 | render timechart
 
@@ -16,6 +18,86 @@ pageViews
 dependencies
 | where timestamp > ago(24h)
 | where client_Type == "Browser"
+| where customDimensions["demo.source"] == "react-playground"
 | where duration > 2000
 | project timestamp, name, duration, success
 | order by duration desc
+
+// Latest demo events: hook state, explicit checkout, identity, timers and clicks
+customEvents
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, name, customDimensions, customMeasurements, user_AuthenticatedId
+| order by timestamp desc
+| take 50
+
+// Checkout measurements must be numeric, not string custom dimensions
+customEvents
+| where timestamp > ago(24h) and name == "demo.checkout"
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, plan = tostring(customDimensions.plan),
+    itemCount = todouble(customMeasurements.itemCount)
+
+// Component engagement is emitted on unmount, in seconds
+customMetrics
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| where name == "React Component Engaged Time (seconds)"
+| summarize averageSeconds = avg(value), samples = count()
+    by component = tostring(customDimensions["Component Name"])
+
+// Custom metrics, render-to-effect estimates and previous-page visit time
+customMetrics
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, name, value, customDimensions
+| order by timestamp desc
+| take 50
+
+// Automatic initial browser page-load timing (not SPA rendering or visit time)
+browserTimings
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, name, totalDuration, networkDuration,
+    sendDuration, receiveDuration, processingDuration
+| order by timestamp desc
+
+// Automatic route page views and deliberately timed virtual pages
+pageViews
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, name, url, duration, operation_Id
+| order by timestamp desc
+| take 50
+
+// Successful/failed HTTP and manually measured non-HTTP dependencies
+dependencies
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, name, type, target, resultCode, success, duration, operation_Id
+| order by timestamp desc
+| take 50
+
+// Warning trace with structured dimensions
+traces
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, message, severityLevel, customDimensions
+| order by timestamp desc
+| take 50
+
+// Click Analytics tagged content (the opted-out click should be absent)
+customEvents
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| where customDimensions.baseTypeSource == "ClickEvent" and name == "demo-offer"
+| project timestamp, name, customDimensions
+| order by timestamp desc
+
+// Explore correlation within a browser operation
+union withsource=tableName pageViews, customEvents, dependencies, exceptions, traces
+| where timestamp > ago(24h)
+| where customDimensions["demo.source"] == "react-playground"
+| project timestamp, tableName, operation_Id, operation_ParentId, name, message
+| order by timestamp desc
+| take 100
