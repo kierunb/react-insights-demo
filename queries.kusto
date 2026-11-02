@@ -1,0 +1,21 @@
+// Find the most common JavaScript errors
+exceptions
+| where timestamp > ago(24h)
+| where client_Type == "Browser"
+| summarize count() by problemId, outerMessage
+| order by count_ desc
+| take 20
+
+// Track page load performance over time
+pageViews
+| where timestamp > ago(7d)
+| summarize avg(duration), percentile(duration, 95) by bin(timestamp, 1h)
+| render timechart
+
+// Find slow API calls from the frontend
+dependencies
+| where timestamp > ago(24h)
+| where client_Type == "Browser"
+| where duration > 2000
+| project timestamp, name, duration, success
+| order by duration desc
