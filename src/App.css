@@ -34,6 +34,7 @@
 .section-heading { display: flex; justify-content: space-between; align-items: center; gap: 20px; }
 .section-heading h2 { margin: 8px 0 0; }
 .examples-heading { margin: 42px 0 22px; }
+.sample-reference { margin: 0 0 22px; font-size: 13px; }
 .count-badge { font-size: 11px; white-space: nowrap; color: #53667c; border: 1px solid var(--border); background: white; border-radius: 20px; padding: 6px 11px; }
 .examples-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 .demo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
@@ -46,6 +47,10 @@
 .demo-controls p, .demo-controls label { font-size: 12px; }
 .button-row { display: flex; flex-wrap: wrap; gap: 8px; }
 .feedback { background: #f2f6fb; border-radius: 5px; padding: 10px 12px; color: #415770; overflow-wrap: anywhere; }
+.page-stopwatch { padding: 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.demo-controls .stopwatch { margin: 4px 0 12px; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 30px; color: var(--heading); }
+.stopwatch span { font-size: 14px; color: var(--text); }
+.page-stopwatch small { margin-top: 10px; }
 .error-message { color: #9b2929; background: #fff1f0; border-radius: 5px; padding: 10px 12px; }
 .output-label { border-top: 1px solid #edf0f5; padding-top: 15px; color: #61758b; font-size: 11px !important; }
 .output-label code { font-size: 10px; }

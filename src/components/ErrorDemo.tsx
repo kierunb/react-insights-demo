@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AppInsightsErrorBoundary } from '@microsoft/applicationinsights-react-js'
+import { SeverityLevel } from '@microsoft/applicationinsights-web'
 import { appInsights, reactPlugin } from '../telemetry/appInsights'
 import { DemoCard } from './DemoCard'
 
@@ -12,6 +13,7 @@ function ErrorFallback() {
   return <p role="alert" className="error-message">The boundary caught the render error. The rest of the app still works.</p>
 }
 
+/** Deliberately emits exceptions; browser-level controls throw outside the React boundary. */
 export function ErrorDemo() {
   const [crash, setCrash] = useState(false)
   const [version, setVersion] = useState(0)
@@ -22,11 +24,13 @@ export function ErrorDemo() {
       api="AppInsightsErrorBoundary / trackException"
       description="Compare a caught exception, a React render failure, and browser-level errors. A boundary does not catch event-handler or asynchronous errors."
       output="exceptions"
-      code={`<AppInsightsErrorBoundary appInsights={reactPlugin}\n  onError={ErrorFallback}>\n  <FragileWidget />\n</AppInsightsErrorBoundary>\n\nappInsights.trackException({\n  exception: new Error('Demo: caught exception'),\n})\n// Browser errors and unhandled rejections are automatic.`}
+      code={`<AppInsightsErrorBoundary appInsights={reactPlugin}\n  onError={ErrorFallback}>\n  <FragileWidget />\n</AppInsightsErrorBoundary>\n\nappInsights.trackException({\n  exception: new Error('Demo: caught exception'),\n  severityLevel: SeverityLevel.Error,\n})\n// Browser errors and unhandled rejections are automatic.\n<button onClick={() => {\n  throw new Error('Demo: uncaught event-handler error')\n}}>Throw handler error</button>`}
     >
       <div className="button-row">
         <button onClick={() => {
-          appInsights.trackException({ exception: new Error('Demo: caught exception') }, { scenario: 'caught' })
+          appInsights.trackException({
+            exception: new Error('Demo: caught exception'), severityLevel: SeverityLevel.Error,
+          }, { scenario: 'caught' })
           setMessage('Caught exception captured explicitly.')
         }}>Track caught exception</button>
         <button className="danger" onClick={() => setCrash(true)} disabled={crash}>Break render</button>
@@ -43,6 +47,10 @@ export function ErrorDemo() {
         <summary>Browser-level error samples</summary>
         <p>These intentionally appear in the browser console and may open Vite&apos;s development error overlay.</p>
         <div className="button-row">
+          <button className="danger" onClick={() => {
+            setMessage('An event-handler error was thrown. Look for an automatically collected exception.')
+            throw new Error('Demo: uncaught event-handler error')
+          }}>Throw handler error</button>
           <button className="danger" onClick={() => {
             setMessage('An uncaught browser error is scheduled.')
             setTimeout(() => { throw new Error('Demo: uncaught browser error') }, 0)

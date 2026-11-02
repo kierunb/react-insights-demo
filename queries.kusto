@@ -78,7 +78,7 @@ dependencies
 | order by timestamp desc
 | take 50
 
-// Warning trace with structured dimensions
+// Information (severity 1) and warning (severity 2) traces with structured dimensions
 traces
 | where timestamp > ago(24h)
 | where customDimensions["demo.source"] == "react-playground"

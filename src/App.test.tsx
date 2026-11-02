@@ -7,6 +7,7 @@ import { appInsights, reactPlugin } from './telemetry/appInsights'
 import { useTracking } from './hooks/useTracking'
 import { trackApiCall } from './hooks/usePerformanceTracking'
 import { clearTelemetryLog } from './telemetry/telemetryLog'
+import { MetricsDemo } from './components/MetricsDemo'
 import App from './App'
 
 const sdk = vi.hoisted(() => ({
@@ -55,7 +56,7 @@ beforeEach(() => {
   history.replaceState({}, '', '/')
   clearTelemetryLog()
 })
-afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.restoreAllMocks(); vi.unstubAllGlobals() })
 
 describe('interactive examples', () => {
   it('skips the initial hook event in Strict Mode and captures a cart update', async () => {
@@ -118,11 +119,40 @@ describe('interactive examples', () => {
     expect(screen.getByText('The example widget is healthy.')).toBeTruthy()
   })
 
-  it('sends bounded metrics, warning severity and both timed APIs', () => {
+  it('tracks a caught exception explicitly at error severity', () => {
+    renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'Track caught exception' }))
+    expect(sdk.trackException).toHaveBeenCalledExactlyOnceWith({
+      exception: expect.objectContaining({ message: 'Demo: caught exception' }),
+      severityLevel: 3,
+    }, { scenario: 'caught' })
+  })
+
+  it('lets the handler error reach the browser without manually duplicating telemetry', () => {
+    const onError = vi.fn((event: ErrorEvent) => event.preventDefault())
+    window.addEventListener('error', onError)
+    try {
+      renderApp()
+      fireEvent.click(screen.getByText('Browser-level error samples'))
+      fireEvent.click(screen.getByRole('button', { name: 'Throw handler error' }))
+      expect(onError).toHaveBeenCalledOnce()
+      expect(onError.mock.calls[0][0].error).toMatchObject({ message: 'Demo: uncaught event-handler error' })
+      expect(sdk.trackException).not.toHaveBeenCalled()
+      expect(screen.getByText('The example widget is healthy.')).toBeTruthy()
+    } finally {
+      window.removeEventListener('error', onError)
+    }
+  })
+
+  it('sends bounded metrics, trace severities and both timed APIs', () => {
     renderApp()
     fireEvent.change(screen.getByLabelText('Cart size: 42 items'), { target: { value: '75' } })
     fireEvent.click(screen.getByRole('button', { name: 'Track metric' }))
     expect(sdk.trackMetric).toHaveBeenCalledWith({ name: 'demo.cart.items', average: 75, sampleCount: 1 }, { unit: '1' })
+    fireEvent.click(screen.getByRole('button', { name: 'Track information trace' }))
+    expect(sdk.trackTrace).toHaveBeenCalledWith({
+      message: 'Demo: information trace', severityLevel: 1,
+    }, { scenario: 'test-page' })
     fireEvent.click(screen.getByRole('button', { name: 'Track warning trace' }))
     expect(sdk.trackTrace).toHaveBeenCalledWith(expect.objectContaining({ severityLevel: 2 }), { scenario: 'inventory' })
     fireEvent.click(screen.getByRole('button', { name: 'Start event timer' }))
@@ -133,6 +163,57 @@ describe('interactive examples', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Stop page timer' }))
     expect(sdk.startTrackPage).toHaveBeenCalledWith('Demo virtual page')
     expect(sdk.stopTrackPage).toHaveBeenCalledWith('Demo virtual page', `${location.origin}/virtual-page`)
+  })
+
+  it('shows elapsed page time, freezes on stop, and resets without extra page views', () => {
+    vi.useFakeTimers()
+    render(<StrictMode><MetricsDemo /></StrictMode>)
+    const clock = screen.getByRole('timer', { name: 'Virtual page elapsed time' })
+    const reset = screen.getByRole('button', { name: 'Reset clock' })
+    expect(clock.textContent).toBe('0.000 s')
+    expect(reset.hasAttribute('disabled')).toBe(true)
+    expect(sdk.startTrackPage).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Start page timer' }))
+    expect(vi.getTimerCount()).toBe(1)
+    expect(reset.hasAttribute('disabled')).toBe(true)
+    act(() => vi.advanceTimersByTime(1250))
+    expect(clock.textContent).toBe('1.200 s')
+    expect(sdk.stopTrackPage).not.toHaveBeenCalled()
+    fireEvent.click(reset)
+    expect(clock.textContent).toBe('1.200 s')
+    fireEvent.click(screen.getByRole('button', { name: 'Stop page timer' }))
+    expect(clock.textContent).toBe('1.250 s')
+    expect(vi.getTimerCount()).toBe(0)
+    expect(reset.hasAttribute('disabled')).toBe(false)
+    act(() => vi.advanceTimersByTime(1000))
+    expect(clock.textContent).toBe('1.250 s')
+    fireEvent.click(reset)
+    expect(clock.textContent).toBe('0.000 s')
+    expect(sdk.stopTrackPage).toHaveBeenCalledExactlyOnceWith('Demo virtual page', `${location.origin}/virtual-page`)
+    expect(sdk.trackPageView).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Start page timer' }))
+    expect(clock.textContent).toBe('0.000 s')
+    act(() => vi.advanceTimersByTime(300))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop page timer' }))
+    expect(clock.textContent).toBe('0.300 s')
+    expect(sdk.startTrackPage).toHaveBeenCalledTimes(2)
+    expect(sdk.stopTrackPage).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: 'Start page timer' }))
+    expect(clock.textContent).toBe('0.000 s')
+    act(() => vi.advanceTimersByTime(200))
+    fireEvent.click(screen.getByRole('button', { name: 'Stop page timer' }))
+    expect(clock.textContent).toBe('0.200 s')
+    expect(sdk.startTrackPage).toHaveBeenCalledTimes(3)
+    expect(sdk.stopTrackPage).toHaveBeenCalledTimes(3)
+  })
+
+  it('clears the page clock interval on unmount', () => {
+    vi.useFakeTimers()
+    const { unmount } = render(<StrictMode><MetricsDemo /></StrictMode>)
+    fireEvent.click(screen.getByRole('button', { name: 'Start page timer' }))
+    expect(vi.getTimerCount()).toBe(1)
+    unmount()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('does not double-track fetch and surfaces failed HTTP responses', async () => {
@@ -146,6 +227,21 @@ describe('interactive examples', () => {
     expect(sdk.trackDependencyData).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Fetch HTTP 503' }))
     await screen.findByText('Demo API returned HTTP 503')
+  })
+
+  it('runs the XHR sample without manually duplicating its dependency', async () => {
+    const request = new XMLHttpRequest()
+    vi.spyOn(request, 'open').mockImplementation(() => {})
+    vi.spyOn(request, 'send').mockImplementation(() => request.dispatchEvent(new Event('load')))
+    vi.spyOn(request, 'status', 'get').mockReturnValue(200)
+    vi.spyOn(request, 'response', 'get').mockReturnValue({ demo: true })
+    vi.stubGlobal('XMLHttpRequest', vi.fn(function () { return request }))
+    renderApp()
+    fireEvent.click(screen.getByRole('button', { name: 'XHR success' }))
+    await screen.findByText(/xhr: completed/)
+    expect(request.open).toHaveBeenCalledWith('GET', '/api/demo/success')
+    expect(request.send).toHaveBeenCalledOnce()
+    expect(sdk.trackDependencyData).not.toHaveBeenCalled()
   })
 
   it('uses fictional non-persisted identity and clears context and cookies', () => {

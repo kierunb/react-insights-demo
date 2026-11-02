@@ -57,6 +57,30 @@ The "SDK initialized" badge is not a connectivity or ingestion check.
 
 ## Examples and functionality
 
+### React SDK TestPage sample coverage
+
+The playground also covers the actions from Microsoft's
+[React SDK TestPage sample](https://github.com/microsoft/applicationinsights-react-js/blob/main/sample/applicationinsights-react-sample/src/TestPage.tsx).
+They extend the existing cards rather than initialize another SDK instance.
+
+| Upstream action                   | Playground control                                       |
+|-----------------------------------|----------------------------------------------------------|
+| `trackEvent`                      | Events: Track checkout                                   |
+| `trackTrace`                      | Metrics: Track information trace (severity 1)             |
+| `trackException`                  | Errors: Track caught exception (severity 3)               |
+| Throw an event-handler error      | Errors: Browser-level error samples / Throw handler error |
+| Automatic XMLHttpRequest / fetch  | Dependencies: XHR success / Fetch success                 |
+| `startTrackPage` / `stopTrackPage` | Metrics: Start / Stop page timer and visible clock        |
+| Reset clock                       | Metrics: Reset clock after stopping                       |
+| `flush`                           | Pipeline: Flush buffer                                   |
+
+HTTP controls use the existing same-origin demo API instead of `httpbin.org`.
+The clock refreshes every 100 milliseconds, displays seconds, freezes at the
+stop time, and starts from zero for each new page measurement. Resetting is
+disabled while running and only clears the stopped display; it does not emit
+another page view or change the completed SDK measurement. The display interval
+is cleared on stop or unmount.
+
 ### Automatic routing and page performance
 
 Source: [App.tsx](./src/App.tsx) and
@@ -115,13 +139,16 @@ profiling. Strict Mode can repeat mount effects in development.
 
 Source: [ErrorDemo.tsx](./src/components/ErrorDemo.tsx).
 
-* Track caught exception sends an explicit `trackException` item.
+* Track caught exception sends an explicit `trackException` item with
+  `SeverityLevel.Error` (`3`).
 * Break render throws inside the child of `AppInsightsErrorBoundary`. The plugin
   reports the error and renders a fallback without replacing the whole app.
 * Reset boundary remounts it so the scenario can be repeated.
-* The expandable browser examples deliberately throw an asynchronous error or
-  reject a promise without a handler. The browser SDK captures these globally;
-  promise rejection tracking is explicitly enabled.
+* The expandable browser examples deliberately throw an event-handler error,
+  throw an asynchronous error, or reject a promise without a handler. The
+  event-handler example matches the upstream TestPage action and is not caught
+  or manually tracked. The browser SDK captures these globally; promise
+  rejection tracking is explicitly enabled.
 
 React boundaries do not catch event-handler errors, timer callbacks, or unhandled
 promise rejections. Expected demo failures remain visible in the browser console.
@@ -134,11 +161,13 @@ Source: [MetricsDemo.tsx](./src/components/MetricsDemo.tsx).
 
 * Track metric records `demo.cart.items` with a value between 1 and 100. Its unit
   is a dimensionless count, not a duration.
-* Track warning trace records severity `Warning` (`2`) in `traces`.
+* Track information trace records severity `Information` (`1`) in `traces`.
+  Track warning trace records severity `Warning` (`2`).
 * Start/Stop event timer uses `startTrackEvent` and `stopTrackEvent` to emit
   `demo.timed.checkout` with duration in milliseconds.
 * Start/Stop page timer uses `startTrackPage` and `stopTrackPage` for a named
-  virtual page. This is intentionally separate from automatic URL navigation.
+  virtual page and displays a local elapsed-time clock. This is intentionally
+  separate from automatic URL navigation.
 
 Starting a timer alone does not emit a completed item. Stop it to see the result.
 Engagement metrics use seconds; custom render timing and dependency durations use

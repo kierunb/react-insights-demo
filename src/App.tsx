@@ -104,6 +104,9 @@ function App() {
           <div><span className="eyebrow">02 / Instrumentation</span><h2>Small examples. Real telemetry.</h2></div>
           <span className="count-badge">8 interactive examples</span>
         </div>
+        <p className="sample-reference">Includes the actions from Microsoft&apos;s{' '}
+          <a href="https://github.com/microsoft/applicationinsights-react-js/blob/main/sample/applicationinsights-react-sample/src/TestPage.tsx"
+            target="_blank" rel="noreferrer">React TestPage sample</a>: events, traces, exceptions, HTTP calls, flushing, and a timed page with a clock.</p>
         <fieldset className="examples-fieldset" disabled={!telemetryReady}>
           <legend className="sr-only">Telemetry examples</legend>
           <div className="demo-grid">
